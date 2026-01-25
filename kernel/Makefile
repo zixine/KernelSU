@@ -1,5 +1,11 @@
 KDIR := $(KDIR)
 MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+# Paksa tambahkan objek SUSFS ke dalam kompilasi modul
+kernelsu-objs := ksu.o hooks.o executable.o ksud.o allowlist.o manager.o \
+                 klog.o th_tracker.o feature.o file_wrapper.o supercalls.o \
+                 selinux/selinux.o setuid_hook.o sucompat.o
+
+ccflags-y += -DCONFIG_KSU_SUSFS -I$(srctree)/$(src)
 
 $(info -- KDIR: $(KDIR))
 $(info -- MDIR: $(MDIR))
