@@ -98,7 +98,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -155,6 +156,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.material3.Surface
 
 import com.topjohnwu.superuser.io.SuFile
+import com.topjohnwu.superuser.Shell
 
 private val BadgeAreaHeight = 37.dp
 
@@ -640,7 +642,7 @@ fun ModuleItem(
             targetValue = if (expanded)
                 BadgeAreaHeight + 8.dp   // expanded
             else
-                BadgeAreaHeight,        // collapsed
+                BadgeAreaHeight,         // collapsed
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioNoBouncy,
                 stiffness = Spring.StiffnessMedium
@@ -677,12 +679,14 @@ fun ModuleItem(
         }
 
         val context = LocalContext.current
-        val moduleSizeMb by produceState<Float?>(initialValue = null, module.id) {
+        val moduleSizeMb by produceState<Float?>(initialValue = null, key1 = module.id) {
             value = withContext(Dispatchers.IO) {
                 calculateModuleSizeMB(module.id)
             }
         }
-        val bannerData by produceState<ByteArray?>(
+
+        // UBAH TIPE DATA KE Any? AGAR BISA STRING (URL) ATAU BYTEARRAY (FILE)
+        val bannerData by produceState<Any?>(
             initialValue = null,
             module.id,
             module.banner
@@ -692,6 +696,12 @@ fun ModuleItem(
                     val b = module.banner?.trim().orEmpty()
                     if (b.isEmpty()) return@withContext null
 
+                    // LOGIKA BARU: Cek jika ini URL
+                    if (b.startsWith("http://") || b.startsWith("https://")) {
+                        return@withContext b // Return String URL
+                    }
+
+                    // Logika lama (File Lokal)
                     val rel = b.removePrefix("/")
                     val p1 = "/data/adb/modules/${module.id}/$rel"
                     val p2 = b
@@ -758,9 +768,10 @@ fun ModuleItem(
             ) {
 
                 // SIZE badge
-                if (moduleSizeMb != null && moduleSizeMb!! > 0f) {
+                val size = moduleSizeMb
+                if (size != null && size > 0f) {
                     BadgeChip(
-                        text = String.format("%.2f MB", moduleSizeMb!!)
+                        text = String.format("%.2f MB", size)
                     )
                 }
 
@@ -813,11 +824,35 @@ fun ModuleItem(
                         .align(Alignment.TopStart)
                         .padding(end = 64.dp)
                 ) {
+
+                    // LOGIKA AUTO-RESIZE TITLE
+                    val initialTitleStyle = MaterialTheme.typography.titleLarge
+                    var titleStyle by remember { mutableStateOf(initialTitleStyle) }
+                    var readyToDraw by remember { mutableStateOf(false) }
+
                     Text(
                         text = module.name,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = titleStyle,
                         fontWeight = FontWeight.SemiBold,
-                        textDecoration = textDecoration
+                        textDecoration = textDecoration,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { textLayoutResult ->
+                            if (textLayoutResult.didOverflowHeight) {
+                                // Kecilkan font sebesar 90% jika overflow
+                                val newSize = titleStyle.fontSize * 0.9f
+                                if (newSize > 14.sp) {
+                                    titleStyle = titleStyle.copy(fontSize = newSize)
+                                } else {
+                                    readyToDraw = true
+                                }
+                            } else {
+                                readyToDraw = true
+                            }
+                        },
+                        modifier = Modifier.drawWithContent {
+                            if (readyToDraw) drawContent()
+                        }
                     )
 
                     Text(
@@ -977,20 +1012,17 @@ fun ModuleItem(
 
 fun calculateModuleSizeMB(moduleId: String): Float {
     return try {
-        val dir = SuFile("/data/adb/modules/$moduleId")
-        if (!dir.exists()) return 0f
+        val result = Shell.cmd("du -sk /data/adb/modules/$moduleId").exec().out
 
-        fun folderSize(file: SuFile): Long {
-            return if (file.isFile) {
-                file.length()
-            } else {
-                file.listFiles()?.sumOf { folderSize(it) } ?: 0L
-            }
+        if (result.isNotEmpty()) {
+            val outputLine = result[0].trim()
+            val sizeInKb = outputLine.split("\\s+".toRegex()).firstOrNull()?.toLongOrNull() ?: 0L
+
+            sizeInKb / 1024f
+        } else {
+            0f
         }
-
-        val bytes = folderSize(dir)
-        bytes / (1024f * 1024f)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
         0f
     }
 }

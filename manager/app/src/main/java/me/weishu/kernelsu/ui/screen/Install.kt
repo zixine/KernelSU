@@ -8,9 +8,10 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -30,7 +31,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -59,12 +59,13 @@ import com.maxkeppeler.sheets.list.models.ListOption
 import com.maxkeppeler.sheets.list.models.ListSelection
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
-import com.ramcosta.composedestinations.generated.destinations.AppProfileTemplateScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FlashScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.navigation.EmptyDestinationsNavigator
 import me.weishu.kernelsu.R
+import me.weishu.kernelsu.getKernelVersion
 import me.weishu.kernelsu.ui.component.DialogHandle
+import me.weishu.kernelsu.ui.component.ExpressiveCheckboxItem
 import me.weishu.kernelsu.ui.component.ExpressiveDropdownItem
 import me.weishu.kernelsu.ui.component.ExpressiveList
 import me.weishu.kernelsu.ui.component.ExpressiveListItem
@@ -100,16 +101,27 @@ fun InstallScreen(navigator: DestinationsNavigator) {
     var partitionSelectionIndex by remember { mutableIntStateOf(0) }
     var partitionsState by remember { mutableStateOf<List<String>>(emptyList()) }
     var hasCustomSelected by remember { mutableStateOf(false) }
+    var allowShell by remember { mutableStateOf(false) }
+    var enableAdb by remember { mutableStateOf(false) }
 
     val onInstall = {
         installMethod?.let { method ->
+            if (method is InstallMethod.AnyKernel) {
+                method.uri?.let {
+                    navigator.navigate(FlashScreenDestination(FlashIt.FlashAnyKernel(it)))
+                }
+                return@let
+            }
+
             val isOta = method is InstallMethod.DirectInstallToInactiveSlot
             val partitionSelection = partitionsState.getOrNull(partitionSelectionIndex)
             val flashIt = FlashIt.FlashBoot(
                 boot = if (method is InstallMethod.SelectFile) method.uri else null,
                 lkm = lkmSelection,
                 ota = isOta,
-                partition = partitionSelection
+                partition = partitionSelection,
+                allowShell = allowShell,
+                enableAdb = enableAdb,
             )
             navigator.navigate(FlashScreenDestination(flashIt))
         }
@@ -125,11 +137,19 @@ fun InstallScreen(navigator: DestinationsNavigator) {
     }
 
     val onClickNext = {
-        if (lkmSelection == LkmSelection.KmiNone && currentKmi.isBlank()) {
-            // no lkm file selected and cannot get current kmi
-            selectKmiDialog.show()
-        } else {
-            onInstall()
+        when (installMethod) {
+            is InstallMethod.AnyKernel -> {
+                onInstall()
+            }
+
+            else -> {
+                if (lkmSelection == LkmSelection.KmiNone && currentKmi.isBlank()) {
+                    // no lkm file selected and cannot get current kmi
+                    selectKmiDialog.show()
+                } else {
+                    onInstall()
+                }
+            }
         }
     }
 
@@ -144,7 +164,7 @@ fun InstallScreen(navigator: DestinationsNavigator) {
                         lkmSelection = LkmSelection.KmiNone
                         Toast.makeText(
                             context,
-                            context.getString(R.string.install_only_support_ko_file),
+                            R.string.install_only_support_ko_file,
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -178,59 +198,78 @@ fun InstallScreen(navigator: DestinationsNavigator) {
             SelectInstallMethod { method ->
                 installMethod = method
             }
+            val isOta = installMethod is InstallMethod.DirectInstallToInactiveSlot
+            val suffix = produceState(initialValue = "", isOta) {
+                value = getSlotSuffix(isOta)
+            }.value
+            val partitions = produceState(initialValue = emptyList()) {
+                value = getAvailablePartitions()
+            }.value
+            val defaultPartition = produceState(initialValue = "") {
+                value = getDefaultPartition()
+            }.value
+            partitionsState = partitions
+            val displayPartitions = partitions.map { name ->
+                if (defaultPartition == name) "$name (default)" else name
+            }
+            val defaultIndex = partitions.indexOf(defaultPartition).takeIf { it >= 0 } ?: 0
+            if (!hasCustomSelected) partitionSelectionIndex = defaultIndex
+            val showOptions = installMethod != null && installMethod !is InstallMethod.AnyKernel
             AnimatedVisibility(
-                visible = installMethod is InstallMethod.DirectInstall || installMethod is InstallMethod.DirectInstallToInactiveSlot,
-                enter = expandVertically(),
-                exit = shrinkVertically()
+                visible = showOptions,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
             ) {
-                val isOta = installMethod is InstallMethod.DirectInstallToInactiveSlot
-                val suffix = produceState(initialValue = "", isOta) {
-                    value = getSlotSuffix(isOta)
-                }.value
-                val partitions = produceState(initialValue = emptyList()) {
-                    value = getAvailablePartitions()
-                }.value
-                val defaultPartition = produceState(initialValue = "") {
-                    value = getDefaultPartition()
-                }.value
-                partitionsState = partitions
-                val displayPartitions = partitions.map { name ->
-                    if (defaultPartition == name) "$name (default)" else name
-                }
-                val defaultIndex = partitions.indexOf(defaultPartition).takeIf { it >= 0 } ?: 0
-                if (!hasCustomSelected) partitionSelectionIndex = defaultIndex
                 ExpressiveList(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    content = listOf {
-                        ExpressiveDropdownItem(
-                            items = displayPartitions,
-                            selectedIndex = partitionSelectionIndex,
-                            title = "${stringResource(R.string.install_select_partition)} (${suffix})",
-                            onItemSelected = { index ->
-                                hasCustomSelected = true
-                                partitionSelectionIndex = index
-                            },
-                            icon = Icons.Filled.Edit
-                        )
-                    }
-                )
-            }
-            ExpressiveList(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                content = listOf {
-                    ExpressiveListItem(
-                        leadingContent = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, null) },
-                        headlineContent = { Text(stringResource(id = R.string.install_upload_lkm_file)) },
-                        supportingContent = {
-                            (lkmSelection as? LkmSelection.LkmUri)?.let {
-                                Text(stringResource(id = R.string.selected_lkm, it.uri.lastPathSegment ?: "(file)"))
+                    content = listOf(
+                        {
+                            if (partitions.isNotEmpty()) {
+                                ExpressiveDropdownItem(
+                                    enabled = installMethod is InstallMethod.DirectInstall || installMethod is InstallMethod.DirectInstallToInactiveSlot,
+                                    items = displayPartitions,
+                                    selectedIndex = partitionSelectionIndex,
+                                    title = "${stringResource(R.string.install_select_partition)} (${suffix})",
+                                    onItemSelected = { index ->
+                                        hasCustomSelected = true
+                                        partitionSelectionIndex = index
+                                    },
+                                    icon = Icons.Filled.Edit
+                                )
                             }
                         },
-                        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)},
-                        onClick = { onLkmUpload() }
+                        {
+                            ExpressiveListItem(
+                                leadingContent = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, null) },
+                                headlineContent = { Text(stringResource(id = R.string.install_upload_lkm_file)) },
+                                supportingContent = {
+                                    (lkmSelection as? LkmSelection.LkmUri)?.let {
+                                        Text(stringResource(id = R.string.selected_lkm, it.uri.lastPathSegment ?: "(file)"))
+                                    }
+                                },
+                                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)},
+                                onClick = { onLkmUpload() }
+                            )
+                        },
+                        {
+                            ExpressiveCheckboxItem(
+                                title = stringResource(id = R.string.allow_shell),
+                                summary = stringResource(id = R.string.allow_shell_summary),
+                                checked = allowShell,
+                                onCheckedChange = { allowShell = it }
+                            )
+                        },
+                        {
+                            ExpressiveCheckboxItem(
+                                title = stringResource(id = R.string.enable_adb),
+                                summary = stringResource(id = R.string.enable_adb_summary),
+                                checked = enableAdb,
+                                onCheckedChange = { enableAdb = it }
+                            )
+                        }
                     )
-                }
-            )
+                )
+            }
             Button(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -245,7 +284,7 @@ fun InstallScreen(navigator: DestinationsNavigator) {
 sealed class InstallMethod {
     data class SelectFile(
         val uri: Uri? = null,
-        @StringRes override val label: Int = R.string.select_file,
+        override val label: Int = R.string.select_file,
         override val summary: String?
     ) : InstallMethod()
 
@@ -258,6 +297,12 @@ sealed class InstallMethod {
         override val label: Int
             get() = R.string.install_inactive_slot
     }
+
+    data class AnyKernel(
+        val uri: Uri? = null,
+        override val label: Int = R.string.anykernel_install,
+        override val summary: String? = null
+    ) : InstallMethod()
 
     abstract val label: Int
     open val summary: String? = null
@@ -275,13 +320,20 @@ private fun SelectInstallMethod(onSelected: (InstallMethod) -> Unit = {}) {
     val selectFileTip = stringResource(
         id = R.string.select_file_tip, defaultPartitionName
     )
-    val radioOptions = mutableListOf<InstallMethod>(InstallMethod.SelectFile(summary = selectFileTip))
+    val radioOptions = mutableListOf<InstallMethod>()
+    if (getKernelVersion().isGKI()) {
+        radioOptions.add(InstallMethod.SelectFile(summary = selectFileTip))
+    }
     if (rootAvailable) {
-        radioOptions.add(InstallMethod.DirectInstall)
+        if (getKernelVersion().isGKI()) {
+            radioOptions.add(InstallMethod.DirectInstall)
 
-        if (isAbDevice) {
-            radioOptions.add(InstallMethod.DirectInstallToInactiveSlot)
+            if (isAbDevice) {
+                radioOptions.add(InstallMethod.DirectInstallToInactiveSlot)
+            }
         }
+
+        radioOptions.add(InstallMethod.AnyKernel())
     }
 
     var selectedOption by remember { mutableStateOf<InstallMethod?>(null) }
@@ -291,6 +343,18 @@ private fun SelectInstallMethod(onSelected: (InstallMethod) -> Unit = {}) {
         if (it.resultCode == Activity.RESULT_OK) {
             it.data?.data?.let { uri ->
                 val option = InstallMethod.SelectFile(uri, summary = selectFileTip)
+                selectedOption = option
+                onSelected(option)
+            }
+        }
+    }
+
+    val selectAnyKernelLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (it.resultCode == Activity.RESULT_OK) {
+            it.data?.data?.let { uri ->
+                val option = InstallMethod.AnyKernel(uri)
                 selectedOption = option
                 onSelected(option)
             }
@@ -320,6 +384,14 @@ private fun SelectInstallMethod(onSelected: (InstallMethod) -> Unit = {}) {
 
             is InstallMethod.DirectInstallToInactiveSlot -> {
                 confirmDialog.showConfirm(dialogTitle, dialogContent)
+            }
+
+            is InstallMethod.AnyKernel -> {
+                selectAnyKernelLauncher.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = "application/zip"
+                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                })
             }
         }
     }

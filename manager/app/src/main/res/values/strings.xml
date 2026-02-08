@@ -96,6 +96,8 @@
     <string name="module_changelog">Changelog</string>
     <string name="settings_kernelsu_toolkit">KernelSU Toolkit</string>
     <string name="settings_kernelsu_toolkit_summary">Utility tool for KernelSU extra feature.</string>
+    <string name="settings_kpatch_next">KPatch Next</string>
+    <string name="settings_kpatch_nextt_summary">Standalone implementation of KPM support.</string>
     <string name="settings_profile_template">App Profile template</string>
     <string name="settings_profile_template_summary">Manage local and online template of App Profile.</string>
     <string name="app_profile_template_create">Create template</string>
@@ -131,6 +133,8 @@
     <string name="select_file">Select a file</string>
     <string name="install_inactive_slot">Install to inactive slot (After OTA)</string>
     <string name="install_inactive_slot_warning">Your device will be **FORCED** to boot to the current inactive slot after a reboot!\nOnly use this option after OTA is done.\nContinue?</string>
+    <string name="flash_module">Flash module</string>
+    <string name="anykernel_install">Flash AnyKernel</string>
     <string name="install_next">Next</string>
     <string name="install_select_partition">Select partition</string>
     <string name="install_upload_lkm_file">Use local LKM file</string>
@@ -208,4 +212,9 @@
     <string name="background_custom">Custom</string>
     <string name="background_default">Default</string>
     <string name="home_android">Android Version</string>
+    <string name="allow_shell">Allow Shell</string>
+    <string name="allow_shell_summary">Allow standard shell access</string>
+    <string name="enable_adb">Enable ADB</string>
+    <string name="enable_adb_summary">Enable USB debugging (ADB) after install</string>
+    <string name="safe_mode_module_disabled">Module installation is disabled in safe mode</string>
 </resources>

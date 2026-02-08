@@ -138,7 +138,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                 .padding(innerPadding)
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             val isManager = Natives.isManager
@@ -319,7 +319,7 @@ private fun StatusCard(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable { if (kernelVersion.isGKI()) onClickInstall() }
+                    .clickable { onClickInstall() }
             ) {
                 // Background Image
                 if (headerImageUri != null) {

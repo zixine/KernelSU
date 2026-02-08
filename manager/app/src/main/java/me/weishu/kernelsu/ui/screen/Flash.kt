@@ -54,6 +54,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
+import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.component.KeyEventBlocker
 import me.weishu.kernelsu.ui.component.rememberConfirmDialog
@@ -61,6 +62,7 @@ import me.weishu.kernelsu.ui.component.ConfirmResult
 import me.weishu.kernelsu.ui.util.FlashResult
 import me.weishu.kernelsu.ui.util.LkmSelection
 import me.weishu.kernelsu.ui.util.LocalSnackbarHost
+import me.weishu.kernelsu.ui.util.flashAnyKernelZip
 import me.weishu.kernelsu.ui.util.flashModule
 import me.weishu.kernelsu.ui.util.installBoot
 import me.weishu.kernelsu.ui.util.reboot
@@ -117,21 +119,29 @@ fun FlashScreen(navigator: DestinationsNavigator, flashIt: FlashIt, skipConfirma
     }
 
     val context = LocalContext.current
-
+    val isSafeMode = Natives.isSafeMode
     val confirmDialog = rememberConfirmDialog()
 
     LaunchedEffect(flashIt, skipConfirmation) {
+        if (isSafeMode && flashIt is FlashIt.FlashModules) {
+            confirmDialog.showConfirm(
+                title = context.getString(R.string.safe_mode),
+                content = context.getString(R.string.safe_mode_module_disabled),
+                confirm = null,
+                dismiss = "OK"
+            )
+            navigator.popBackStack()
+            return@LaunchedEffect
+        }
+
         val flashTarget = if (flashIt is FlashIt.FlashModules && !skipConfirmation) {
             val uris = flashIt.uris
-            val moduleNames =
-                uris.mapIndexed { index, uri -> "\n${index + 1}. ${uri.getFileName(context)}" }
-                    .joinToString("")
-            val confirmContent =
-                context.getString(R.string.module_install_prompt_with_name, moduleNames)
-            val confirmTitle = context.getString(R.string.module)
+            val moduleNames = uris.mapIndexed { index, uri ->
+                "\n${index + 1}. ${uri.getFileName(context)}"
+            }.joinToString("")
             val result = confirmDialog.awaitConfirm(
-                title = confirmTitle,
-                content = confirmContent,
+                title = context.getString(R.string.module),
+                content = context.getString(R.string.module_install_prompt_with_name, moduleNames),
                 markdown = true
             )
 
@@ -254,10 +264,12 @@ fun Uri.getFileName(context: Context): String {
 
 @Parcelize
 sealed class FlashIt : Parcelable {
-    data class FlashBoot(val boot: Uri? = null, val lkm: LkmSelection, val ota: Boolean, val partition: String? = null) :
+    data class FlashBoot(val boot: Uri? = null, val lkm: LkmSelection, val ota: Boolean, val partition: String? = null, val allowShell: Boolean = false, val enableAdb: Boolean = false) :
         FlashIt()
 
     data class FlashModules(val uris: List<Uri>) : FlashIt()
+
+    data class FlashAnyKernel(val uri: Uri) : FlashIt()
 
     data object FlashRestore : FlashIt()
 
@@ -275,6 +287,8 @@ fun flashIt(
             flashIt.lkm,
             flashIt.ota,
             flashIt.partition,
+            flashIt.allowShell,
+            flashIt.enableAdb,
             onStdout,
             onStderr
         )
@@ -282,6 +296,12 @@ fun flashIt(
         is FlashIt.FlashModules -> {
             flashModulesSequentially(flashIt.uris, onStdout, onStderr)
         }
+
+        is FlashIt.FlashAnyKernel -> flashAnyKernelZip(
+            flashIt.uri,
+            onStdout,
+            onStderr
+        )
 
         FlashIt.FlashRestore -> restoreBoot(onStdout, onStderr)
 
