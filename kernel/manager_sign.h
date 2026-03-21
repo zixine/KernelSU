@@ -57,6 +57,11 @@
 #define EXPECTED_SIZE_KAMISU 0x2e8
 #define EXPECTED_HASH_KAMISU \
     "653fcbd25f27860a44dff957578fd081bb705a5f319ab7bd5a5d287873db65d0"
+
+// zixine/KernelSU
+#define EXPECTED_SIZE_ZIXINE 0x376
+#define EXPECTED_HASH_ZIXINE \
+    "abf7a7bead4a924028aba80020b7b44d7e3b734c942eae280090b423e6908833"
 // -------------------------------
 
 typedef struct {
