@@ -1,0 +1,47 @@
+name: Generate Keystore
+
+on:
+  # workflow_dispatch membolehkan kita menjalankan script ini secara manual dari tab Actions
+  workflow_dispatch:
+
+jobs:
+  generate-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Generate Android Keystore (key.jks)
+        run: |
+          # Membuat keystore baru dengan password dan alias bawaan
+          keytool -genkey -v \
+            -keystore key.jks \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -alias zixine_alias \
+            -dname "CN=ZixineSu, OU=Zixine, O=Zixine, L=Jakarta, ST=Jakarta, C=ID" \
+            -storepass zixine_password \
+            -keypass zixine_password
+          
+          # Mengubah file key.jks menjadi teks Base64 agar bisa dimasukkan ke GitHub Secret
+          base64 key.jks | tr -d '\n' > key_base64.txt
+
+      - name: Upload Keystore Base64
+        uses: actions/upload-artifact@v4
+        with:
+          name: keystore-base64-txt
+          path: key_base64.txt
+
+      - name: Ringkasan untuk GitHub Secrets
+        run: |
+          echo "### Info GitHub Secrets Anda sudah siap!" >> $GITHUB_STEP_SUMMARY
+          echo "Sila salin nilai-nilai berikut ke **Settings > Secrets and variables > Actions** di repositori Anda:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **KEYSTORE_PASSWORD** : \`zixine_password\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **KEY_ALIAS** : \`zixine_alias\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **KEY_PASSWORD** : \`zixine_password\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **KEYSTORE** : Sila muat turun fail \`keystore-base64-txt\` dari bahagian Artifacts di halaman ini, buka fail txt tersebut, dan salin semua teks di dalamnya ke dalam secret KEYSTORE." >> $GITHUB_STEP_SUMMARY
