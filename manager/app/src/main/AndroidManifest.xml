@@ -14,7 +14,6 @@
         android:hasFragileUserData="true"
         android:icon="@mipmap/ic_launcher_zixine"
         android:roundIcon="@mipmap/ic_launcher_zixine"
-        android:icon="@mipmap/ic_launcher_mambo_mip"
         android:label="ZixineSu"
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
