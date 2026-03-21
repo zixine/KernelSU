@@ -27,4 +27,7 @@ if [ -f "./app/build.gradle.kts" ]; then
     sed -i 's/outputFileName = "MamboSU_${managerVersionName}_${managerVersionCode}-\$name.apk"/outputFileName = "ZixineSu_${managerVersionName}_${managerVersionCode}-\$name.apk"/' ./app/build.gradle.kts
 fi
 
+# Ganti referensi app_name_mambo menjadi app_name standar di semua file Kotlin
+find . -type f -name "*.kt" -exec sed -i 's/app_name_mambo/app_name/g' {} +
+
 echo "Done. Berhasil mengubah menjadi ZixineSu."
